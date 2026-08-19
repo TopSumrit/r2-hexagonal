@@ -4,11 +4,16 @@ import {
   type IBlobStorageRepository,
   blobStorageRepositoryToken,
 } from '@/server/gateway/blob-storage/applications/ports/blob-storage.repository';
-import { NotFoundError } from '@/server/lib/errors';
+import { NotFoundError } from '@/server/lib/http-error.factory';
 import {
   type IImageRepository,
   imageRepositoryToken,
 } from '../ports/image.repository';
+
+export interface IConfirmImageUploadUsecaseCommand {
+  id: number;
+  newImagePath: string;
+}
 
 @injectable()
 export class ConfirmImageUploadUseCase {
@@ -19,16 +24,16 @@ export class ConfirmImageUploadUseCase {
     private readonly blobStorageRepository: IBlobStorageRepository,
   ) {}
 
-  async execute(command: { id: number; newImagePath: string }) {
+  async execute(command: IConfirmImageUploadUsecaseCommand) {
     const existing = await this.repository.findById(command.id);
     if (!existing) throw new NotFoundError();
 
-    const updated = await this.repository.update(command.id, {
-      imagePath: command.newImagePath,
-    });
+    const imagePath = command.newImagePath;
+    const updated = await this.repository.update(command.id, { imagePath });
 
-    if (existing.imagePath && existing.imagePath !== command.newImagePath) {
-      await this.blobStorageRepository.deleteObject(existing.imagePath);
+    const hasPreviousImage = existing.imagePath && existing.imagePath !== imagePath;
+    if (hasPreviousImage) {
+      await this.blobStorageRepository.deleteObject(existing.imagePath as string);
     }
 
     return updated;

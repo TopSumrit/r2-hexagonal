@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import Elysia from 'elysia';
 import { inject, injectable } from 'tsyringe';
 
 import { ConfirmImageUploadUseCase } from '../../applications/usecases/confirm-image-upload.usecase';
@@ -22,24 +22,40 @@ export class ImageController {
     private readonly getImageUseCase: GetImageUseCase,
   ) {}
 
-  routes() {
-    return new Elysia()
-      .post(
-        '/uploads/presigned-upload',
-        async ({ body }) =>
-          this.getPresignedUploadUrlUseCase.execute({ contentType: body.contentType }),
-        { body: presignedUploadBody },
+  registerRoutes(server: Elysia) {
+    return server
+      .group('/uploads', (app) =>
+        app.post(
+          '/presigned-upload',
+          async ({ body }) => {
+            return this.getPresignedUploadUrlUseCase.execute({
+              contentType: body.contentType,
+            });
+          },
+          { body: presignedUploadBody },
+        ),
       )
-      .post(
-        '/images/:id/confirm-upload',
-        async ({ params, body }) =>
-          this.confirmImageUploadUseCase.execute({ id: params.id, newImagePath: body.key }),
-        { params: confirmUploadParams, body: confirmUploadBody },
-      )
-      .get(
-        '/images/:id/image',
-        async ({ params }) => this.getImageUseCase.execute({ id: params.id }),
-        { params: getImageParams },
+      .group('/images', (app) =>
+        app
+          .post(
+            '/:id/confirm-upload',
+            async ({ params, body }) => {
+              return this.confirmImageUploadUseCase.execute({
+                id: params.id,
+                newImagePath: body.key,
+              });
+            },
+            { params: confirmUploadParams, body: confirmUploadBody },
+          )
+          .get(
+            '/:id/image',
+            async ({ params }) => this.getImageUseCase.execute({ id: params.id }),
+            { params: getImageParams },
+          ),
       );
+  }
+
+  getRoutes() {
+    return this.registerRoutes(new Elysia({ tags: ['Images'] }));
   }
 }

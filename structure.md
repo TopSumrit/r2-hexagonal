@@ -6,12 +6,15 @@
 r2-hex/
 ├─ drizzle/                          # migration files ที่ generate โดย drizzle-kit
 ├─ server/
-│  ├─ index.ts                       # bootstrap: ประกอบ Elysia + DI + routes
+│  ├─ app.ts                         # ประกอบ Elysia app (prefix /api) + wire DI modules
+│  ├─ standalone.ts                  # entry point: ฟัง port (dev/testing)
+│  ├─ domains/                       # shared domain types (image.domain.ts)
 │  ├─ lib/
+│  │  ├─ app-error-handler.ts        # error handler กลาง (onError)
 │  │  ├─ env.ts                      # อ่าน env vars (r2Env, dbEnv)
-│  │  └─ errors.ts                   # custom error (NotFoundError)
+│  │  └─ http-error.factory.ts       # HTTP error classes (NotFoundError, UnsupportedMediaTypeError, ...)
 │  ├─ database/
-│  │  ├─ index.ts                    # db instance (drizzle + postgres connection)
+│  │  ├─ index.ts                    # db instance (drizzle + node-postgres/pg)
 │  │  └─ schema/index.ts             # นิยามตาราง DB (images)
 │  ├─ gateway/
 │  │  └─ blob-storage/               # gateway ไปยัง external (R2) — คัดลอกไปโปรเจกต์อื่นได้เลย
@@ -22,10 +25,10 @@ r2-hex/
 │     └─ images/                     # module หลัก: business logic รูปภาพ
 │        ├─ images.module.ts         # ลงทะเบียน DI: image repository
 │        ├─ applications/
-│        │  ├─ usecases/             # business logic ล้วนๆ (รู้แค่ port)
+│        │  ├─ usecases/             # business logic ล้วนๆ (+ *.usecase.test.ts)
 │        │  └─ ports/                # interface ของ DB (IImageRepository)
 │        └─ adapters/
-│           ├─ controllers/          # HTTP routes + schemas
+│           ├─ controllers/          # HTTP routes (registerRoutes/getRoutes) + schemas/ + *.http
 │           └─ repository/           # implement port ด้วย Drizzle
 └─ .env / .env.example               # config (DATABASE_URL, R2_*)
 ```
@@ -165,21 +168,30 @@ container.registerSingleton(imageRepositoryToken, ImageDrizzleRepository);
 
 ---
 
-## 6. `server/index.ts` — bootstrap
+## 6. `server/app.ts` + `server/standalone.ts` — bootstrap
+
+`app.ts` ประกอบ Elysia app (ไม่ listen — เอาไปเทสต์/ยิงได้):
 
 ```typescript
 import 'reflect-metadata';               // ต้อง import ก่อน tsyringe
-import '@/server/gateway/blob-storage/blob-storage.module';  // ลงทะเบียน DI
-import '@/server/modules/images/images.module';
+import './gateway/blob-storage/blob-storage.module';   // ลงทะเบียน DI
+import './modules/images/images.module';
+import { handleAppError } from './lib/app-error-handler';
 
-const app = new Elysia()
-  .onError(({ error, set }) => {         // map NotFoundError → 404
-    if (error instanceof NotFoundError) { set.status = 404; return { message: error.message }; }
-    throw error;
-  })
-  .use(container.resolve(ImageController).routes());  // resolve controller จาก DI
+const imageController = container.resolve(ImageController);
 
-app.listen(process.env.PORT ?? 3000);
+export const app = new Elysia({ prefix: '/api' })
+  .onError(handleAppError)
+  .use(cors())
+  .use(openapi())
+  .use(imageController.getRoutes());
+```
+
+`standalone.ts` เป็น entry point ที่เรียก listen แล้ว:
+
+```typescript
+import { app } from './app';
+const server = app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
 ```
 
 ---

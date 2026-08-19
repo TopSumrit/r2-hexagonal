@@ -1,0 +1,31 @@
+@host = http://localhost:3000/api
+@token =
+
+###
+# @name getPresignedUploadUrl
+POST {{host}}/uploads/presigned-upload
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "contentType": "image/jpeg"
+}
+
+###
+# @name confirmImageUpload
+# @prompt id
+# @prompt key
+POST {{host}}/images/{{id}}/confirm-upload
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "key": "{{key}}"
+}
+
+###
+# @name getImage
+# @prompt id
+GET {{host}}/images/{{id}}/image
+Authorization: Bearer {{token}}
+Accept: application/json
